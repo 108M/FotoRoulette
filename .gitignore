@@ -1,0 +1,32 @@
+# ==============================
+# Raíz del Proyecto general
+# ==============================
+node_modules/
+.DS_Store
+.env
+.idea/
+.vscode/
+*.log
+
+# ==============================
+# Entorno Servidor Node.js (Backend)
+# ==============================
+server/node_modules/
+server/.env
+server/uploads/
+
+# ==============================
+# Entorno Expo React Native (Frontend)
+# ==============================
+app/node_modules/
+app/.expo/
+app/dist/
+app/npm-debug.*
+app/*.jks
+app/*.p8
+app/*.p12
+app/*.key
+app/*.mobileprovision
+app/*.orig.*
+app/web-build/
+app/build/
