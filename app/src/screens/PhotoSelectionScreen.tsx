@@ -100,7 +100,7 @@ export default function PhotoSelectionScreen({ navigation, route }: any) {
   const handleUpload = async () => {
     if (photos.length === 0) return;
     setUploading(true);
-    setUploadMessage("Analizando fotos con IA...");
+    setUploadMessage(route.params?.useAI !== false ? "Analizando fotos con IA..." : "Enviando fotos...");
 
     try {
       let currentBatch = [...photos];

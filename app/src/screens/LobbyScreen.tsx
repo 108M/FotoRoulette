@@ -10,7 +10,7 @@ export default function LobbyScreen({ navigation, route }: any) {
     socket.on('roomState', (state: any) => {
       setRoomState(state);
       if (state.state === 'PHOTO_SELECTION') {
-        navigation.replace('PhotoSelection', { roomId: state.id, gameMode: state.gameMode });
+        navigation.replace('PhotoSelection', { roomId: state.id, gameMode: state.gameMode, useAI: state.useAI });
       }
     });
 
@@ -75,6 +75,24 @@ export default function LobbyScreen({ navigation, route }: any) {
           ) : (
             <Text style={styles.settingsValue}>
               {roomState.gameMode === 'HARD' ? '😈 HARD' : '🥶 EASY'}
+            </Text>
+          )}
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subtitle}>FILTRO ANTI APUNTES</Text>
+          {isCreator ? (
+            <TouchableOpacity 
+              style={[styles.modeButton, roomState.useAI !== false ? styles.modeHard : styles.modeEasy]}
+              onPress={() => socket.emit('updateSettings', { useAI: roomState.useAI !== false ? false : true })}
+            >
+              <Text style={styles.modeText}>
+                {roomState.useAI !== false ? '🛡️ ACTIVADO (Seguro)' : '🚀 DESACTIVADO (Rápido)'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.settingsValue}>
+              {roomState.useAI !== false ? '🛡️ ACTIVADO' : '🚀 DESACTIVADO'}
             </Text>
           )}
 

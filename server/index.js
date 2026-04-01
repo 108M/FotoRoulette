@@ -46,6 +46,14 @@ app.post('/upload', upload.array('photos', 10), (req, res) => {
     return res.status(404).send('Player not found');
   }
 
+  // BYPASS DE IA SI ESTÁ DESACTIVADA
+  if (rooms[roomId].useAI === false) {
+    const photoUrlsFast = req.files.map(f => '/uploads/' + path.basename(f.path));
+    rooms[roomId].players[socketId].photos = rooms[roomId].players[socketId].photos.concat(photoUrlsFast);
+    console.log(`[UPLOAD][OK] IA desactivada. Aceptadas ${req.files.length} fotos rápidas.`);
+    return res.json({ success: true, urls: photoUrlsFast, rejectedCount: 0 });
+  }
+
   // --- FILTRO ANTI-TRAMPAS MODO HÍBRIDO ---
   const filePaths = req.files.map(f => `"${path.resolve(f.path)}"`).join(' ');
   const pythonScript = path.resolve(__dirname, 'clasificar.py');
@@ -114,7 +122,8 @@ io.on('connection', (socket) => {
       photosPool: [],
       currentRound: null,
       maxRounds: 10,
-      gameMode: 'HARD'
+      gameMode: 'HARD',
+      useAI: true
     };
     joinRoom(socket, roomId, name);
   });
@@ -148,11 +157,12 @@ io.on('connection', (socket) => {
     io.to(socket.roomId).emit('roomState', getSafeRoomState(socket.roomId));
   });
 
-  socket.on('updateSettings', ({ maxRounds, gameMode }) => {
+  socket.on('updateSettings', ({ maxRounds, gameMode, useAI }) => {
     const room = rooms[socket.roomId];
     if (room && room.creator === socket.id && room.state === 'LOBBY') {
       if (maxRounds !== undefined) room.maxRounds = maxRounds;
       if (gameMode !== undefined) room.gameMode = gameMode;
+      if (useAI !== undefined) room.useAI = useAI;
       io.to(socket.roomId).emit('roomState', getSafeRoomState(socket.roomId));
     }
   });
@@ -338,6 +348,7 @@ function getSafeRoomState(roomId) {
     creator: room.creator,
     maxRounds: room.maxRounds,
     gameMode: room.gameMode,
+    useAI: room.useAI,
     players: Object.values(room.players).map(p => ({
       id: p.id,
       name: p.name, // Aseguramos que el nombre se envíe
