@@ -16,7 +16,6 @@
     "expo-dev-client": "~6.0.20",
     "expo-image-picker": "~17.0.10",
     "expo-media-library": "~18.2.1",
-    "expo-screen-capture": "~8.0.9",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
