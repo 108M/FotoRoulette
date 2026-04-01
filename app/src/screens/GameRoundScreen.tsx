@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Image, TouchableOpacity, FlatList, ActivityIndicator, SafeAreaView, Modal } from 'react-native';
 import { socket, SERVER_URL } from '../services/socket';
 
 export default function GameRoundScreen({ navigation, route }: any) {
   const [roomState, setRoomState] = useState<any>(route.params?.roomState || null);
   const [timeLeft, setTimeLeft] = useState(0);
   const [votedFor, setVotedFor] = useState<string | null>(null);
+  const [isPhotoModalVisible, setPhotoModalVisible] = useState(false);
 
   useEffect(() => {
     const onRoomState = (state: any) => {
@@ -81,14 +82,50 @@ export default function GameRoundScreen({ navigation, route }: any) {
           <Text style={[styles.timer, timeLeft <= 3 && styles.timerDanger]}>{timeLeft}s</Text>
         </View>
 
-        <View style={styles.photoContainer}>
+        <TouchableOpacity 
+          style={styles.photoContainer}
+          activeOpacity={0.9}
+          onPress={() => setPhotoModalVisible(true)}
+        >
           <Image
             source={{ uri: photoUrl }}
             style={styles.photo}
             resizeMode="cover"
             key={photoUrl}
           />
-        </View>
+          <View style={styles.magnifyIcon}>
+            <Text style={styles.magnifyText}>🔍</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* --- MODAL PANTALLA COMPLETA --- */}
+        <Modal
+          visible={isPhotoModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setPhotoModalVisible(false)}
+        >
+          <View style={styles.modalBackground}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setPhotoModalVisible(false)}
+            >
+              <Text style={styles.modalCloseText}>✖ CERRAR</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.modalContent} 
+              activeOpacity={1} 
+              onPress={() => setPhotoModalVisible(false)}
+            >
+              <Image
+                source={{ uri: photoUrl }}
+                style={styles.modalImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          </View>
+        </Modal>
 
         <FlatList
           data={roomState.players}
@@ -126,8 +163,15 @@ const styles = StyleSheet.create({
   question: { fontSize: 16, color: '#FFF', fontWeight: '900', letterSpacing: 1.5 },
   timer: { fontSize: 32, fontWeight: '900', color: '#00E5FF', textShadowColor: '#00E5FF', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 },
   timerDanger: { color: '#FF2A5F', textShadowColor: '#FF2A5F' },
-  photoContainer: { width: '100%', height: 350, borderRadius: 24, marginBottom: 24, backgroundColor: '#151828', borderWidth: 2, borderColor: '#2A2D40', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 15, overflow: 'hidden' },
+  photoContainer: { width: '100%', height: 350, borderRadius: 24, marginBottom: 24, backgroundColor: '#151828', borderWidth: 2, borderColor: '#2A2D40', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 20, elevation: 15, overflow: 'hidden', position: 'relative' },
   photo: { width: '100%', height: '100%' },
+  magnifyIcon: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.6)', padding: 10, borderRadius: 20, borderWidth: 1, borderColor: '#4A4D60' },
+  magnifyText: { fontSize: 16 },
+  modalBackground: { flex: 1, backgroundColor: 'rgba(5,7,15,0.95)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalImage: { width: '100%', height: '80%' },
+  modalCloseButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, paddingVertical: 10, paddingHorizontal: 15, backgroundColor: '#FF2A5F', borderRadius: 12, shadowColor: '#FF2A5F', shadowOpacity: 0.5, shadowRadius: 10 },
+  modalCloseText: { color: '#FFF', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
   listContainer: { paddingBottom: 20 },
   voteButton: { flex: 1, backgroundColor: '#151828', margin: 8, padding: 20, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#2A2D40' },
   voteButtonSelected: { backgroundColor: '#FF2A5F', borderColor: '#FFF', shadowColor: '#FF2A5F', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 15, elevation: 10 },
