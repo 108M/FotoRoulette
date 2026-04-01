@@ -30,3 +30,4 @@ app/*.mobileprovision
 app/*.orig.*
 app/web-build/
 app/build/
+clasificador

@@ -6,6 +6,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { exec } = require('child_process');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,7 +33,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const rooms = {};
 
-// --- LOGS EN UPLOAD ---
 app.post('/upload', upload.array('photos', 10), (req, res) => {
   const { roomId, socketId } = req.body;
   console.log(`\n[UPLOAD] Intento de subida - Sala: ${roomId}, Socket: ${socketId}`);
@@ -46,11 +46,58 @@ app.post('/upload', upload.array('photos', 10), (req, res) => {
     return res.status(404).send('Player not found');
   }
 
-  const photoUrls = req.files.map(file => '/uploads/' + file.filename);
-  rooms[roomId].players[socketId].photos = photoUrls;
+  // --- FILTRO ANTI-TRAMPAS MODO HÍBRIDO ---
+  const filePaths = req.files.map(f => `"${path.resolve(f.path)}"`).join(' ');
+  const pythonScript = path.resolve(__dirname, 'clasificar.py');
+  
+  // Usamos 'python3' por si el Docker lo exige, o 'python' (Render / Local OS compatibility)
+  const pyCmd = process.platform === "win32" ? "python" : "python3";
+  const cmd = `${pyCmd} "${pythonScript}" ${filePaths}`;
 
-  console.log(`[UPLOAD][OK] ${photoUrls.length} fotos guardadas para ${rooms[roomId].players[socketId].name}`);
-  res.json({ success: true, urls: photoUrls });
+  console.log(`[UPLOAD] IA Analizando ${req.files.length} fotos subidas...`);
+  
+  exec(cmd, { maxBuffer: 1024 * 1024 * 5 }, (error, stdout, stderr) => {
+    let result = null;
+    try {
+      // Python devuelve el resultado en la última línea como JSON bruto
+      const lines = stdout.trim().split("\n");
+      result = JSON.parse(lines[lines.length - 1]);
+    } catch (e) {
+      console.error("[IA ERROR] Parse JSON:\n", stdout, "\n", stderr);
+      // Fallback de emergencia: aceptamos todas para no bloquear el juego
+      result = { accepted: req.files.map(f => f.path), rejected: [] };
+    }
+
+    if (result.error) {
+       console.error(`[IA SCRIPT ERROR]: ${result.error}`);
+       result = { accepted: req.files.map(f => f.path), rejected: [] };
+    }
+
+    const rechazadas = result.rejected || [];
+    const aceptadas = result.accepted || [];
+
+    // 1. Borrar Físicamente los Apuntes Tramposos
+    rechazadas.forEach(rPath => {
+       try { 
+         fs.unlinkSync(rPath); 
+         console.log(`[ANTI-TRAMPAS] Borrado apunte detectado: ${path.basename(rPath)}`);
+       } catch (err) {}
+    });
+
+    // 2. Guardar en partida las Correctas
+    const photoUrls = aceptadas.map(p => '/uploads/' + path.basename(p));
+    // Inicializamos array si no existe, o adjuntamos las nuevas (Por si le estamos reponiendo fallos)
+    rooms[roomId].players[socketId].photos = rooms[roomId].players[socketId].photos.concat(photoUrls);
+
+    console.log(`[UPLOAD][OK] ${photoUrls.length} fotos validadas. ${rechazadas.length} APUNTES DESTRUIDOS 🔥`);
+    
+    // 3. Devolvemos resultados al Móvil para que rellene automáticamente
+    res.json({ 
+      success: true, 
+      urls: photoUrls, 
+      rejectedCount: rechazadas.length 
+    });
+  });
 });
 
 io.on('connection', (socket) => {
