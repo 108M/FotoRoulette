@@ -7,7 +7,10 @@ import { socket, SERVER_URL } from '../services/socket';
 export default function PhotoSelectionScreen({ navigation, route }: any) {
   const [photos, setPhotos] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Guardamos las fotos que ya hemos intentado subir para no repetirlas
+  const [usedPhotoIds, setUsedPhotoIds] = useState<Set<string>>(new Set());
 
   const gameMode = route.params?.gameMode || 'HARD';
 
@@ -44,7 +47,7 @@ export default function PhotoSelectionScreen({ navigation, route }: any) {
         return;
       }
 
-      const allPhotos = await MediaLibrary.getAssetsAsync({ first: 500, mediaType: 'photo' });
+      const allPhotos = await MediaLibrary.getAssetsAsync({ first: 1000, mediaType: 'photo' });
 
       if (allPhotos.assets.length === 0) {
         setError('Tu galería física está vacía. Por favor, elige fotos manualmente.');
@@ -53,6 +56,8 @@ export default function PhotoSelectionScreen({ navigation, route }: any) {
 
       const shuffled = allPhotos.assets.sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, Math.min(10, shuffled.length));
+      
+      setUsedPhotoIds(new Set(selected.map(p => p.id)));
       setPhotos(selected);
 
     } catch (e) {
@@ -75,53 +80,79 @@ export default function PhotoSelectionScreen({ navigation, route }: any) {
     }
   };
 
-  const handleUpload = async () => {
-    if (photos.length === 0) return;
-    setUploading(true);
-
+  const uploadBatch = async (batchPhotos: any[]) => {
     const formData = new FormData();
     formData.append('roomId', route.params?.roomId || '');
     formData.append('socketId', socket.id as string);
 
-    for (let i = 0; i < photos.length; i++) {
-      const photoAsset = photos[i];
-      let fileData;
-      
-      if (Platform.OS === 'web' && photoAsset.file) {
-        // En web, expo-image-picker provee un objeto origin File real
-        fileData = photoAsset.file;
-      } else {
-        // En nativo se usa el objeto con uri, name y type
-        fileData = {
-          uri: photoAsset.uri,
-          name: `photo_${i}.jpg`,
-          type: 'image/jpeg',
-        };
-      }
-      
-      formData.append('photos', fileData as any);
+    for (let i = 0; i < batchPhotos.length; i++) {
+        const photoAsset = batchPhotos[i];
+        let fileData;
+        if (Platform.OS === 'web' && photoAsset.file) fileData = photoAsset.file;
+        else fileData = { uri: photoAsset.uri, name: `photo_${i}.jpg`, type: 'image/jpeg' };
+        formData.append('photos', fileData as any);
     }
+    
+    const response = await fetch(`${SERVER_URL}/upload`, { method: 'POST', body: formData });
+    return JSON.parse(await response.text());
+  };
+
+  const handleUpload = async () => {
+    if (photos.length === 0) return;
+    setUploading(true);
+    setUploadMessage("Analizando fotos con IA...");
 
     try {
-      const response = await fetch(`${SERVER_URL}/upload`, {
-        method: 'POST',
-        body: formData,
-        // IMPORTANTE: NO ponemos Content-Type. fetch pondrá el boundary correcto auto.
-      });
+      let currentBatch = [...photos];
+      let rejectedTotal = 0;
 
-      const rawText = await response.text();
-      const data = JSON.parse(rawText);
+      while (currentBatch.length > 0) {
+        const data = await uploadBatch(currentBatch);
 
-      if (data.success) {
-        socket.emit('playerReady');
-        navigation.replace('GameReadyWait');
-      } else {
-        alert('Error del servidor: ' + (data.message || 'Desconocido'));
-        setUploading(false);
+        if (!data.success) {
+          alert('Error del servidor: ' + (data.message || 'Desconocido'));
+          setUploading(false);
+          return;
+        }
+
+        if (data.rejectedCount && data.rejectedCount > 0) {
+          rejectedTotal += data.rejectedCount;
+          setUploadMessage(`¡La IA pilló ${data.rejectedCount} apuntes!\nBuscando repuestos...`);
+
+          if (gameMode === 'HARD') {
+            // Reponer de la galería automáticamente
+            const allPhotos = await MediaLibrary.getAssetsAsync({ first: 1000, mediaType: 'photo' });
+            const available = allPhotos.assets.filter(p => !usedPhotoIds.has(p.id));
+            const shuffled = available.sort(() => 0.5 - Math.random());
+            
+            const newReplacements = shuffled.slice(0, data.rejectedCount);
+            
+            if (newReplacements.length === 0) {
+               alert("Te has quedado sin fotos en la galería para rellenar.");
+               break;
+            }
+
+            const newUsed = new Set(usedPhotoIds);
+            newReplacements.forEach(p => newUsed.add(p.id));
+            setUsedPhotoIds(newUsed);
+            
+            currentBatch = newReplacements;
+          } else {
+            alert(`La IA detectó ${data.rejectedCount} apuntes en tus elegidas. El servidor las ha borrado y faltan para llegar a 10. Jugarás con menos.`);
+            break;
+          }
+        } else {
+          // Todo perfecto en este lote
+          break;
+        }
       }
+
+      socket.emit('playerReady');
+      navigation.replace('GameReadyWait');
+
     } catch (e) {
       console.error('Error procesando la subida:', e);
-      alert('Hubo un problema al enviar las fotos al servidor.');
+      alert('Hubo un problema al enviar o reponer las fotos.');
       setUploading(false);
     }
   };
@@ -201,7 +232,7 @@ export default function PhotoSelectionScreen({ navigation, route }: any) {
               )}
             />
             <TouchableOpacity style={styles.uploadButton} onPress={handleUpload} disabled={uploading}>
-              <Text style={styles.uploadText}>{uploading ? 'ENVIANDO...' : '¡LISTO PARA JUGAR!'}</Text>
+              <Text style={styles.uploadText}>{uploading ? (uploadMessage || 'ENVIANDO...') : '¡LISTO PARA JUGAR!'}</Text>
             </TouchableOpacity>
           </>
         )}
