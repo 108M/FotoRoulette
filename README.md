@@ -4,6 +4,14 @@
 
 Para probar el juego en local (con tus amigos estando en la **misma red Wi-Fi**), sigue las instrucciones a continuación.
 
+## Stack
+
+- **App móvil**: React Native + Expo
+- **Servidor**: Node.js (Socket.IO para las salas en tiempo real)
+- **Filtro de contenido**: clasificador SVM en Python (OpenCV + scikit-image)
+  que analiza cada foto subida y rechaza automáticamente capturas/apuntes
+  que no sean fotos reales, antes de que entren en la partida
+
 ---
 
 ## 🛠️ Requisitos Previos
